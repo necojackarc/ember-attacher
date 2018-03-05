@@ -194,6 +194,10 @@ export default Component.extend({
     // Used to make sure animations can complete before the attachment is hidden.
     this._animationTimeout = null;
 
+    // Used for simulating click events on iOS
+    // as `document.addEventlistener('click', handler)` doesn't work.
+    this._documentClickOnIos = false;
+
     // Used to store event listeners so they can be removed when necessary.
     this._hideListenersOnDocumentByEvent = {};
     this._hideListenersOnTargetByEvent = {};
@@ -202,11 +206,16 @@ export default Component.extend({
     // Hacks to make sure event listeners have the right context and are still removable
     this._debouncedHideIfMouseOutsideTargetOrAttachment
       = this._debouncedHideIfMouseOutsideTargetOrAttachment.bind(this);
+    this._disableDocumentClickSimulationOnClickOutOnIos
+      = this._disableDocumentClickSimulationOnClickOutOnIos.bind(this);
+    this._enableDocumentClickSimulationOnClickOutOnIos
+      = this._enableDocumentClickSimulationOnClickOutOnIos.bind(this);
     this._hide = this._hide.bind(this);
     this._hideAfterDelay = this._hideAfterDelay.bind(this);
     this._hideIfMouseOutsideTargetOrAttachment
       = this._hideIfMouseOutsideTargetOrAttachment.bind(this);
     this._hideOnClickOut = this._hideOnClickOut.bind(this);
+    this._hideOnClickOutOnIos = this._hideOnClickOutOnIos.bind(this);
     this._hideOnEscapeKey = this._hideOnEscapeKey.bind(this);
     this._hideOnLostFocus = this._hideOnLostFocus.bind(this);
     this._hideOnMouseLeaveTarget = this._hideOnMouseLeaveTarget.bind(this);
@@ -479,6 +488,21 @@ export default Component.extend({
     if (hideOn.indexOf('clickout') !== -1) {
       this._hideListenersOnDocumentByEvent.click = this._hideOnClickOut;
       document.addEventListener('click', this._hideOnClickOut);
+
+      // On iOS, `document.addEventListener('click', handler)` doesn't work,
+      // so simulating click events using touch events.
+      if (navigator.userAgent && navigator.userAgent.match(/iPhone|iPad|iPod/)) {
+        this._hideListenersOnDocumentByEvent.touchstart
+          = this._enableDocumentClickSimulationOnClickOutOnIos;
+        document.addEventListener('touchstart', this._enableDocumentClickSimulationOnClickOutOnIos);
+
+        this._hideListenersOnDocumentByEvent.touchmove
+          = this._disableDocumentClickSimulationOnClickOutOnIos;
+        document.addEventListener('touchmove', this._disableDocumentClickSimulationOnClickOutOnIos);
+
+        this._hideListenersOnDocumentByEvent.touchend = this._hideOnClickOutOnIos;
+        document.addEventListener('touchend', this._hideOnClickOutOnIos);
+      }
     }
 
     if (hideOn.indexOf('escapekey') !== -1) {
@@ -611,6 +635,24 @@ export default Component.extend({
       }
     } else if (!targetContainsFocus) {
       this._hideAfterDelay();
+    }
+  },
+
+  // Only for hideOn click on iOS
+  _enableDocumentClickSimulationOnClickOutOnIos() {
+    this._documentClickOnIos = true;
+  },
+
+  // Only for hideOn click on iOS
+  _disableDocumentClickSimulationOnClickOutOnIos() {
+    // Don't regard it as a click event when the touched position moved
+    this._documentClickOnIos = false;
+  },
+
+  // Only for hideOn click on iOS
+  _hideOnClickOutOnIos(event) {
+    if (this._documentClickOnIos) {
+      this._hideOnClickOut(event);
     }
   },
 
